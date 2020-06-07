@@ -28,9 +28,9 @@ def export_ndvi(in_out_file_pairs):
     return
 
 if __name__ == '__main__':
-    list_nr_workers = [1,2,3,4]
-    list_nr_img = range(5,31,5)
-    s2_data_dir =  pathlib.Path('./s2_images')
+    list_nr_workers = [1,2,4]
+    list_nr_img = range(50,100,10)
+    s2_data_dir =  pathlib.Path('./s2_images/')
     output_dir_ndvi = './out/ndvi'
     output_dir_time = './out/time'
    
@@ -41,8 +41,8 @@ if __name__ == '__main__':
         time_spark = []
         for nr_img in list_nr_img:
             # Setting in/out path 
-            out_dir_dask = output_dir_ndvi + 'dask_workerS{}_IMG{}/'.format(nr_worker, nr_img)
-            out_dir_spark = output_dir_ndvi + 'spark_workerS{}_IMG{}/'.format(nr_worker, nr_img)
+            out_dir_dask = output_dir_ndvi + 'dask_workers{}_IMG{}/'.format(nr_worker, nr_img)
+            out_dir_spark = output_dir_ndvi + 'spark_workers{}_IMG{}/'.format(nr_worker, nr_img)
             os.makedirs(out_dir_dask) if not os.path.exists(out_dir_dask) else None
             os.makedirs(out_dir_spark) if not os.path.exists(out_dir_spark) else None
             in_out_file_pairs_dask= [(f.as_posix(), out_dir_dask + f.stem+'_NDVI.png') for f in s2_data_dir.iterdir() if f.suffix == '.tif'][0:nr_img]
@@ -51,7 +51,6 @@ if __name__ == '__main__':
             print(in_out_file_pairs_spark)
 
             # Dask Run
-            t0 = time.clock()
             # Setup cluster
             cluster = LocalCluster(processes=True, 
                                 n_workers=nr_worker, 
@@ -64,35 +63,36 @@ if __name__ == '__main__':
             for f in in_out_file_pairs_dask:
                 future = client.submit(export_ndvi, f)
                 futures.append(future)
+            t0 = time.clock()
             results = client.gather(futures)
+            t1 = time.clock() - t0
             # Shutdown
             address = client.scheduler.address  # get adress
             client.close()
             Client(address).shutdown()
             # Recording time
-            t1 = time.clock() - t0
             time_dask.append(t1)
 
             # Spark Run
-            t0 = time.clock()
             # Setup SparkContext
             sc = SparkContext(master="local[{}]".format(nr_worker))
             task = sc.parallelize(in_out_file_pairs_spark)
             # Pipeline run for NDVI
+            t0 = time.clock()
             task.map(export_ndvi).collect()
+            t1 = time.clock() - t0
             SparkContext.stop(sc)
             # Recording time
-            t1 = time.clock() - t0
             time_spark.append(t1)
 
         # Make image of processing time
         plt.figure('time')
         plt.plot(list_nr_img, time_dask, label='Dask, {} workers'.format(nr_worker))
         plt.plot(list_nr_img, time_spark, label='Spark, {} workers'.format(nr_worker))
-        plt.legend()    
     
     # Save figures
     plt.figure('time')
+    plt.legend()
     plt.xlabel('Number of input images')
     plt.ylabel('Wall time (sec)')
     plt.savefig(output_dir_time+'walltime_{}.png'.format(time.clock()))
