@@ -22,15 +22,15 @@ def export_ndvi(in_out_file_pairs):
     nir = np.array(img.GetRasterBand(4).ReadAsArray())
     vir = np.array(img.GetRasterBand(8).ReadAsArray())
     ndvi = (nir-vir)/(nir+vir)
-    # Export tiff
-    plt.imshow(ndvi)
-    plt.savefig(outfile)
+    # # Export tiff
+    # plt.imshow(ndvi)
+    # plt.savefig(outfile)
     return
 
 if __name__ == '__main__':
     list_nr_workers = [1,2,4]
-    list_nr_img = range(50,100,10)
-    s2_data_dir =  pathlib.Path('./s2_images/')
+    list_nr_img = range(50,500,50)
+    s2_data_dir =  pathlib.Path('./s2_images_large/')
     output_dir_ndvi = './out/ndvi'
     output_dir_time = './out/time'
    
@@ -63,13 +63,12 @@ if __name__ == '__main__':
             for f in in_out_file_pairs_dask:
                 future = client.submit(export_ndvi, f)
                 futures.append(future)
-            t0 = time.clock()
+            t0 = time.time()
             results = client.gather(futures)
-            t1 = time.clock() - t0
+            t1 = time.time() - t0
             # Shutdown
-            address = client.scheduler.address  # get adress
             client.close()
-            Client(address).shutdown()
+            cluster.close()
             # Recording time
             time_dask.append(t1)
 
@@ -78,9 +77,9 @@ if __name__ == '__main__':
             sc = SparkContext(master="local[{}]".format(nr_worker))
             task = sc.parallelize(in_out_file_pairs_spark)
             # Pipeline run for NDVI
-            t0 = time.clock()
+            t0 = time.time()
             task.map(export_ndvi).collect()
-            t1 = time.clock() - t0
+            t1 = time.time() - t0
             SparkContext.stop(sc)
             # Recording time
             time_spark.append(t1)
